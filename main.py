@@ -503,6 +503,43 @@ def draw_ghost(cv, x, y, w, h, alpha):
                       (px[o], px[o + 1], px[o + 2]), alpha * f)
 
 
+def draw_rosette(cv, cx, cy, color):
+    # v6: a banknote rosette behind the data page, after the
+    # parametric curves in the pattern-generator repo (circular wave
+    # + hypotrochoid), re-derived here in stdlib Python: sine-modulated
+    # rings around a spirograph core, the way real security printing
+    # does it. Drawn first, so the printed data sits on top of it.
+    def plot(pts):
+        for i in range(len(pts) - 1):
+            cv.line(int(pts[i][0]), int(pts[i][1]),
+                    int(pts[i + 1][0]), int(pts[i + 1][1]), color, 1)
+
+    # circular-wave rings: base radius modulated by layered sines
+    for base, amp, freq in ((150, 6, 24), (185, 8, 18), (220, 5, 30)):
+        pts = []
+        steps = 720
+        for i in range(steps + 1):
+            t = 2 * math.pi * i / steps
+            r = (base + amp * math.sin(freq * t)
+                 + 2 * math.sin(3 * freq * t + 1.1))
+            pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
+        plot(pts)
+
+    # hypotrochoid core: a circle of radius r rolling inside R,
+    # pen at distance d. Closes after r / gcd(R, r) turns.
+    R, r, d = 90, 35, 28
+    max_t = 2 * math.pi * r / math.gcd(R, r)
+    steps = 1400
+    pts = []
+    diff = R - r
+    ratio = diff / r
+    for i in range(steps + 1):
+        t = max_t * i / steps
+        pts.append((cx + diff * math.cos(t) + d * math.cos(ratio * t),
+                    cy + diff * math.sin(t) - d * math.sin(ratio * t)))
+    plot(pts)
+
+
 # ---------------------------------------------------------------- stamps
 def draw_stamp(cv, cx, cy, w, h, ang, color, lines):
     rot_rect(cv, cx, cy, w, h, ang, color, 2)
@@ -551,9 +588,9 @@ def build():
         fill_rect_alpha(cv, 496 + i * 3, 16, 3, H - 32, (90, 80, 60), a)
         fill_rect_alpha(cv, 518 - i * 3, 16, 3, H - 32, (90, 80, 60), a)
 
-    # guilloche: faint concentric rings behind the data page
-    for r in range(70, 300, 34):
-        cv.ellipse_outline(256, 310, r, r, GUILLOCHE, 1)
+    # v6: guilloche rosette behind the data page (replaces the plain
+    # concentric rings): a banknote-style security rosette
+    draw_rosette(cv, 256, 310, GUILLOCHE)
 
     # vertical margin note, left edge
     draw_text_rot(cv, 26, 430, 1, "REPUBLIKA KESTRIA - PASAPORTA", INK_SOFT, -90)
