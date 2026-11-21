@@ -587,7 +587,7 @@ def build():
 
     # v5: the watermark under the printed data, plus the Border
     # Service seal in the empty space under the portrait
-    draw_ghost(cv, 370, 290, 90, 118, 0.10)
+    draw_ghost(cv, 370, 290, 90, 118, 0.20)
     draw_seal(cv, 109, 445, 28, TEAL)
 
     # data fields, two columns where they fit. v2: labels at scale 2
