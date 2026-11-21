@@ -819,50 +819,55 @@ def build():
 
     # visa sticker, v2: taller box, every line at scale 2 in bold so
     # the visa condition actually reads
-    cv.fill_rect(540, 92, 456, 160, TEAL_FILL)
+    # v6.7: compressed (146 tall) so a third stamp row fits below
+    cv.fill_rect(540, 92, 456, 146, TEAL_FILL)
     cv.line(540, 92, 995, 92, TEAL, 2)
-    cv.line(540, 251, 995, 251, TEAL, 2)
-    cv.line(540, 92, 540, 251, TEAL, 2)
-    cv.line(995, 92, 995, 251, TEAL, 2)
+    cv.line(540, 237, 995, 237, TEAL, 2)
+    cv.line(540, 92, 540, 237, TEAL, 2)
+    cv.line(995, 92, 995, 237, TEAL, 2)
     cv.line(546, 98, 989, 98, TEAL, 1)
-    cv.line(546, 245, 989, 245, TEAL, 1)
+    cv.line(546, 231, 989, 231, TEAL, 1)
     draw_text_bold(cv, 556, 100, 3, "VISA", TEAL)
     draw_text(cv, 868, 104, 1, "No. DV-2024-1187", TEAL)
-    draw_text_bold(cv, 556, 128, 2, "MULTIPLE ENTRY - FERRY SERVICE", INK)
-    draw_text_bold(cv, 556, 150, 2, "VALID 90 DAYS - STAY MAX 30 DAYS", INK)
-    draw_text_bold(cv, 556, 172, 2, "FEE PAID 45 KST - RECEIPT No. 2214", INK)
-    draw_text_bold(cv, 556, 194, 2, "FERRY MASTER'S LICENCE FM-2210", INK)
-    draw_text_bold(cv, 556, 212, 2, "LAKE KESTRA ROUTES ONLY", INK)
-    draw_text_bold(cv, 556, 230, 2, "VESSEL CLASS III", INK)
-    draw_seal(cv, 948, 214, 26, RED)
+    draw_text_bold(cv, 556, 126, 2, "MULTIPLE ENTRY - FERRY SERVICE", INK)
+    draw_text_bold(cv, 556, 146, 2, "VALID 90 DAYS - STAY MAX 30 DAYS", INK)
+    draw_text_bold(cv, 556, 166, 2, "FEE PAID 45 KST - RECEIPT No. 2214", INK)
+    draw_text_bold(cv, 556, 186, 2, "FERRY MASTER'S LICENCE FM-2210", INK)
+    draw_text_bold(cv, 556, 204, 2, "LAKE KESTRA ROUTES ONLY", INK)
+    draw_text_bold(cv, 556, 222, 2, "VESSEL CLASS III", INK)
+    draw_seal(cv, 948, 208, 26, RED)
 
-    # stamps: two rows, three trips, arrival before departure, all
-    # dated after the passport was issued (12 MAR 2024), in order.
-    # v2: bigger boxes, all stamp text at scale 2.
+    # stamps: v6.7 — three rows, nine stamps, four trips plus one
+    # arrival; arrival before departure, all dated after the
+    # passport was issued (12 MAR 2024), in order.
     stamps = [
-        (612, 312, -14, BLUE, [("DRAVIA", 2), ("ARRIVAL", 2), ("08 MAY 2024", 2)]),
-        (768, 312, 9, GREEN, [("DRAVIA", 2), ("DEPARTURE", 2), ("21 MAY 2024", 2)]),
-        (924, 312, -7, BLUE, [("OSTMAR", 2), ("ARRIVAL", 2), ("03 SEP 2024", 2)]),
-        (612, 442, 12, GREEN, [("OSTMAR", 2), ("DEPARTURE", 2), ("17 SEP 2024", 2)]),
-        (768, 442, -10, BLUE, [("TALVERIA", 2), ("ARRIVAL", 2), ("22 JAN 2025", 2)]),
-        (924, 442, 6, GREEN, [("TALVERIA", 2), ("DEPARTURE", 2), ("05 FEB 2025", 2)]),
+        (612, 300, -14, BLUE, [("DRAVIA", 2), ("ARRIVAL", 2), ("08 MAY 2024", 2)]),
+        (768, 300, 9, GREEN, [("DRAVIA", 2), ("DEPARTURE", 2), ("21 MAY 2024", 2)]),
+        (924, 300, -7, BLUE, [("OSTMAR", 2), ("ARRIVAL", 2), ("03 SEP 2024", 2)]),
+        (612, 392, 12, GREEN, [("OSTMAR", 2), ("DEPARTURE", 2), ("17 SEP 2024", 2)]),
+        (768, 392, -10, BLUE, [("TALVERIA", 2), ("ARRIVAL", 2), ("22 JAN 2025", 2)]),
+        (924, 392, 6, GREEN, [("TALVERIA", 2), ("DEPARTURE", 2), ("05 FEB 2025", 2)]),
+        (612, 484, -11, BLUE, [("MERIDIA", 2), ("ARRIVAL", 2), ("14 APR 2025", 2)]),
+        (768, 484, 8, GREEN, [("MERIDIA", 2), ("DEPARTURE", 2), ("28 APR 2025", 2)]),
+        (924, 484, -5, BLUE, [("VOSTOK", 2), ("ARRIVAL", 2), ("09 JUN 2025", 2)]),
     ]
     for cx, cy, ang, color, lines in stamps:
-        draw_stamp(cv, cx, cy, 150, 100, ang, color, lines)
+        draw_stamp(cv, cx, cy, 150, 84, ang, color, lines)
 
     # lake toll stamp, stamped across the visa's foot and the top of
     # the stamp grid, the way a real toll stamp lands on top of the rest
-    draw_stamp(cv, 850, 260, 190, 36, -7, (176, 138, 28),
+    draw_stamp(cv, 850, 246, 190, 36, -7, (176, 138, 28),
                [("LAKE TOLL PAID", 2)])
 
     # conditions, v2: darker ink so the fine print reads too
-    draw_text_bold(cv, 540, 516, 2, "CONDITIONS", INK)
-    draw_text(cv, 540, 540, 1, "1. THIS PASSPORT REMAINS THE PROPERTY OF THE", INK)
-    draw_text(cv, 540, 554, 1, "   REPUBLIC OF KESTRIA.", INK)
-    draw_text(cv, 540, 570, 1, "2. LOSS OR THEFT MUST BE REPORTED TO THE", INK)
-    draw_text(cv, 540, 584, 1, "   NEAREST KESTRIAN MISSION.", INK)
-    draw_text(cv, 540, 600, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK)
-    draw_text(cv, 540, 614, 1, "   WHERE ENDORSED OTHERWISE.", INK)
+    # v6.7: moved down under the third stamp row
+    draw_text_bold(cv, 540, 544, 2, "CONDITIONS", INK)
+    draw_text(cv, 540, 562, 1, "1. THIS PASSPORT REMAINS THE PROPERTY OF THE", INK)
+    draw_text(cv, 540, 573, 1, "   REPUBLIC OF KESTRIA.", INK)
+    draw_text(cv, 540, 584, 1, "2. LOSS OR THEFT MUST BE REPORTED TO THE", INK)
+    draw_text(cv, 540, 595, 1, "   NEAREST KESTRIAN MISSION.", INK)
+    draw_text(cv, 540, 606, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK)
+    draw_text(cv, 540, 617, 1, "   WHERE ENDORSED OTHERWISE.", INK)
 
     # v5: the spread sits on dark polished marble, like a book
     # photographed on a table — the two pages read as two pages,
