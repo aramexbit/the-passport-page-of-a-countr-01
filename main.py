@@ -295,6 +295,61 @@ def rot_rect(cv, cx, cy, w, h, ang, c, t=1):
         cv.line(int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1)), c, t)
 
 
+def draw_text_bold(cv, x, y, s, txt, c, adv=None):
+    """Faux-bold: the same glyphs drawn twice, 1px apart. Only for
+    scale >= 2 with the default advance (at scale 1 the letters
+    would touch). Makes values and headings read clearly."""
+    draw_text(cv, x, y, s, txt, c, adv)
+    draw_text(cv, x + 1, y, s, txt, c, adv)
+
+
+def text_center_bold(cv, cx, y, s, txt, c, adv=None):
+    w = text_w(txt, s, adv)
+    draw_text_bold(cv, cx - w // 2, y, s, txt, c, adv)
+
+
+def set_alpha(cv, x, y, c, a):
+    """Blend colour c over the pixel at (x, y) with opacity a (0..1)."""
+    if 0 <= x < cv.w and 0 <= y < cv.h:
+        i = (y * cv.w + x) * 3
+        for k in range(3):
+            cv.px[i + k] = int(cv.px[i + k] * (1.0 - a) + c[k] * a)
+
+
+def fill_rect_alpha(cv, x, y, w, h, c, a):
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(cv.w, x + w), min(cv.h, y + h)
+    for yy in range(y0, y1):
+        for xx in range(x0, x1):
+            set_alpha(cv, xx, yy, c, a)
+
+
+def ellipse_alpha(cv, cx, cy, rx, ry, c, a):
+    """Soft shaded ellipse: every pixel inside blends towards c."""
+    if rx <= 0 or ry <= 0:
+        return
+    for yy in range(max(0, cy - ry), min(cv.h, cy + ry + 1)):
+        d = (yy - cy) / ry
+        hw = int(rx * math.sqrt(max(0.0, 1.0 - d * d)))
+        for xx in range(max(0, cx - hw), min(cv.w, cx + hw + 1)):
+            set_alpha(cv, xx, yy, c, a)
+
+
+def grain(cv, pct=6, amount=9):
+    """Deterministic paper grain: a fixed hash of (x, y) darkens a
+    few percent of the paper pixels by a few levels. No randomness,
+    so two runs stay byte-identical. Applied to the bare paper only,
+    before the content is drawn on top."""
+    for yy in range(cv.h):
+        for xx in range(cv.w):
+            h = (xx * 374761393 + yy * 668265263) & 0xFFFFFFFF
+            if h % 100 < pct:
+                i = (yy * cv.w + xx) * 3
+                for k in range(3):
+                    v = cv.px[i + k] - amount
+                    cv.px[i + k] = v if v > 0 else 0
+
+
 # ---------------------------------------------------------------- MRZ (ICAO 9303)
 def mrz_digit(s):
     vals = {c: i for i, c in enumerate("0123456789")}
@@ -322,38 +377,70 @@ def mrz_lines():
 def draw_portrait(cv, x, y, w, h):
     # Draw into a sub-canvas the size of the photo box, then blit: the
     # jacket ellipse must not spill past the frame (it did in v1).
+    # v2: a more lifelike portrait — soft shading, catchlights, ears,
+    # hair strands and a highlight, a shadow under the chin.
     sub = Canvas(w, h, PHOTO_TOP)
     for i in range(h):
         sub.fill_rect(0, i, w, 1, lerp(PHOTO_TOP, PHOTO_BOT, i / max(1, h - 1)))
+    # soft light behind the head, like a studio portrait
+    ellipse_alpha(sub, w // 2, 82, 62, 66, (235, 240, 246), 0.35)
     cx = w // 2
     # shoulders / jacket
     sub.ellipse(cx, h + 16, w // 2 - 4, 58, JACKET)
+    # jacket shading at the edges
+    ellipse_alpha(sub, cx - 52, h - 8, 26, 34, (20, 36, 60), 0.30)
+    ellipse_alpha(sub, cx + 52, h - 8, 26, 34, (20, 36, 60), 0.30)
     # shirt V
     sub.polygon([(cx - 13, 138), (cx + 13, 138), (cx, h)], SHIRT)
     # jacket lapels
     sub.line(cx - 13, 138, cx - 40, h, (30, 52, 82), 2)
     sub.line(cx + 13, 138, cx + 40, h, (30, 52, 82), 2)
-    # neck
+    # neck, with a shadow under the chin
     sub.fill_rect(cx - 13, 118, 26, 26, SKIN_D)
+    ellipse_alpha(sub, cx, 124, 16, 7, (150, 105, 72), 0.35)
+    # ears
+    sub.ellipse(cx - 40, 84, 6, 12, SKIN)
+    sub.ellipse(cx + 40, 84, 6, 12, SKIN)
+    ellipse_alpha(sub, cx - 40, 84, 4, 8, SKIN_D, 0.45)
+    ellipse_alpha(sub, cx + 40, 84, 4, 8, SKIN_D, 0.45)
     # hair cap
     sub.ellipse(cx, 56, 43, 38, HAIR)
     # face
     sub.ellipse(cx, 80, 40, 46, SKIN)
+    # soft shading: forehead light, cheek shadows, chin shadow
+    ellipse_alpha(sub, cx, 48, 26, 12, (246, 214, 180), 0.45)
+    ellipse_alpha(sub, cx - 26, 96, 12, 18, (206, 152, 108), 0.28)
+    ellipse_alpha(sub, cx + 26, 96, 12, 18, (206, 152, 108), 0.28)
+    ellipse_alpha(sub, cx, 122, 14, 6, (206, 152, 108), 0.30)
     # side locks of hair
     sub.ellipse(cx - 40, 98, 8, 32, HAIR)
     sub.ellipse(cx + 40, 98, 8, 32, HAIR)
+    # hair strands and a highlight
+    sub.line(cx - 30, 30, cx - 34, 62, (96, 62, 44), 1)
+    sub.line(cx - 12, 22, cx - 14, 54, (96, 62, 44), 1)
+    sub.line(cx + 8, 22, cx + 12, 52, (96, 62, 44), 1)
+    sub.line(cx + 28, 30, cx + 32, 60, (96, 62, 44), 1)
+    ellipse_alpha(sub, cx - 16, 34, 16, 7, (122, 88, 62), 0.50)
     # brows
     sub.line(cx - 25, 68, cx - 9, 66, HAIR, 2)
     sub.line(cx + 9, 66, cx + 25, 68, HAIR, 2)
-    # eyes
+    # eyes: white, brown iris, dark pupil, catchlight, lid line
     for ex in (cx - 17, cx + 17):
         sub.ellipse(ex, 78, 8, 5, (255, 255, 255))
-        sub.ellipse(ex, 78, 4, 4, (40, 32, 28))
-    # nose
+        sub.ellipse(ex, 78, 5, 4, (94, 62, 40))
+        sub.ellipse(ex, 78, 3, 3, (28, 20, 16))
+        sub.set(ex - 2, 76, (255, 255, 255))
+        sub.line(ex - 8, 72, ex + 8, 72, (90, 60, 46), 1)
+    # nose: shaded side, bridge highlight, nostril line
+    ellipse_alpha(sub, cx - 4, 90, 3, 8, (206, 152, 108), 0.35)
+    sub.line(cx + 1, 82, cx + 1, 94, (246, 214, 180), 1)
     sub.line(cx, 82, cx - 2, 96, SKIN_D, 2)
     sub.line(cx - 2, 96, cx + 3, 97, SKIN_D, 2)
-    # lips
-    sub.ellipse(cx, 110, 9, 3, (176, 84, 84))
+    # lips: darker upper lip, lighter lower lip with a highlight
+    sub.ellipse(cx, 108, 9, 3, (150, 62, 62))
+    sub.ellipse(cx, 111, 8, 3, (196, 110, 108))
+    sub.set(cx - 3, 110, (232, 170, 165))
+    sub.set(cx + 2, 111, (232, 170, 165))
     cv.blit(sub, x, y)
     # frame
     cv.line(x, y, x + w - 1, y, INK, 2)
@@ -403,6 +490,13 @@ def build():
     cv.line(508, 10, 508, H - 11, RULE, 1)
     cv.line(515, 10, 515, H - 11, RULE, 1)
 
+    # paper grain on the bare paper, then a soft shadow hugging the
+    # gutter so the spread reads as a real open document
+    grain(cv)
+    for i, a in enumerate((0.04, 0.07, 0.10, 0.13)):
+        fill_rect_alpha(cv, 496 + i * 3, 16, 3, H - 32, (90, 80, 60), a)
+        fill_rect_alpha(cv, 518 - i * 3, 16, 3, H - 32, (90, 80, 60), a)
+
     # guilloche: faint concentric rings behind the data page
     for r in range(70, 300, 34):
         cv.ellipse_outline(256, 310, r, r, GUILLOCHE, 1)
@@ -415,12 +509,13 @@ def build():
     cv.polygon([(233, 32), (279, 32), (279, 58), (256, 84), (233, 58)], INK)
     cv.polygon([(237, 36), (275, 36), (275, 56), (256, 78), (237, 56)], GOLD)
     cv.star(256, 54, 11, 4, RED)
-    text_center(cv, 256, 96, 2, "REPUBLIC OF KESTRIA", INK)
-    text_center(cv, 256, 120, 3, "PASSPORT", INK)
-    text_center(cv, 256, 148, 1, "PASAPORTA", RED)
+    text_center_bold(cv, 256, 96, 2, "REPUBLIC OF KESTRIA", INK)
+    text_center_bold(cv, 256, 120, 3, "PASSPORT", INK)
+    text_center_bold(cv, 256, 148, 2, "PASAPORTA", RED)
     cv.line(40, 164, 484, 164, RULE, 1)
 
-    # portrait
+    # portrait, with a soft drop shadow behind its frame
+    fill_rect_alpha(cv, 38, 182, 150, 196, (60, 50, 40), 0.22)
     draw_portrait(cv, 34, 178, 150, 196)
 
     # signature under the portrait
@@ -428,21 +523,25 @@ def build():
     cv.line(84, 388, 118, 398, INK, 1)
     cv.line(118, 398, 150, 390, INK, 1)
     cv.line(150, 390, 174, 396, INK, 1)
-    text_center(cv, 109, 404, 1, "SIGNATURE", INK_SOFT)
+    text_center(cv, 109, 406, 2, "SIGNATURE", INK_SOFT)
 
-    # data fields, two columns where they fit
+    # data fields, two columns where they fit. v2: labels at scale 2
+    # like the values (the scale-1 labels were the hardest text to
+    # read), values in faux-bold, rows spaced a little wider.
     fx = 204
     row = 182
-    step = 36
+    step = 38
 
-    def field(label, value, x=fx, y=None, vscale=2):
-        nonlocal_row = y
-        draw_text(cv, x, nonlocal_row, 1, label, INK_SOFT)
-        draw_text(cv, x, nonlocal_row + 12, vscale, value, INK)
+    def field(label, value, x=fx, y=None, vscale=2, adv=None, bold=True):
+        draw_text(cv, x, y, 2, label, INK_SOFT)
+        if bold:
+            draw_text_bold(cv, x, y + 15, vscale, value, INK, adv)
+        else:
+            draw_text(cv, x, y + 15, vscale, value, INK, adv)
 
     field("TYPE", "P", y=row)
-    field("CODE", "KES", x=fx + 70, y=row)
-    field("PASSPORT No.", "KST847291", x=fx + 150, y=row)
+    field("CODE", "KES", x=fx + 58, y=row)
+    field("PASSPORT No.", "KST847291", x=fx + 126, y=row)
     row += step
     field("SURNAME", "VOSS", y=row)
     row += step
@@ -451,14 +550,14 @@ def build():
     field("NATIONALITY", "KESTRIAN", y=row)
     row += step
     field("DATE OF BIRTH", "14 JUN 1992", y=row)
-    field("SEX", "F", x=fx + 200, y=row)
+    field("SEX", "F", x=fx + 170, y=row)
     row += step
     field("PLACE OF BIRTH", "ALDHAVEN", y=row)
     row += step
-    field("DATE OF ISSUE", "12 MAR 2024", y=row)
-    field("DATE OF EXPIRY", "11 MAR 2034", x=fx + 170, y=row)
+    field("ISSUED", "12 MAR 2024", y=row)
+    field("EXPIRES", "11 MAR 2034", x=fx + 146, y=row)
     row += step
-    field("AUTHORITY", "BORDER SERVICE - ALDHAVEN", y=row)
+    field("AUTHORITY", "BORDER SERVICE - ALDHAVEN", y=row, adv=11, bold=False)
 
     # MRZ band, full data-page width, tracked like real OCR-B
     l1, l2 = mrz_lines()
@@ -468,48 +567,51 @@ def build():
     text_center(cv, 256, 576, 1, "THIS PASSPORT CONTAINS 32 PAGES - KESTRIA", INK_SOFT)
 
     # ---- right page: visas and stamps ----
-    text_center(cv, 768, 30, 3, "VISAS", INK)
-    text_center(cv, 768, 60, 1, "VISA - STAMPS - ENDORSEMENTS", INK_SOFT)
+    text_center_bold(cv, 768, 30, 3, "VISAS", INK)
+    text_center(cv, 768, 60, 1, "VISA - STAMPS - ENDORSEMENTS", INK)
     cv.line(540, 78, 996, 78, RULE, 1)
 
-    # visa sticker
-    cv.fill_rect(540, 92, 456, 140, TEAL_FILL)
+    # visa sticker, v2: taller box, every line at scale 2 in bold so
+    # the visa condition actually reads
+    cv.fill_rect(540, 92, 456, 160, TEAL_FILL)
     cv.line(540, 92, 995, 92, TEAL, 2)
-    cv.line(540, 231, 995, 231, TEAL, 2)
-    cv.line(540, 92, 540, 231, TEAL, 2)
-    cv.line(995, 92, 995, 231, TEAL, 2)
+    cv.line(540, 251, 995, 251, TEAL, 2)
+    cv.line(540, 92, 540, 251, TEAL, 2)
+    cv.line(995, 92, 995, 251, TEAL, 2)
     cv.line(546, 98, 989, 98, TEAL, 1)
-    cv.line(546, 225, 989, 225, TEAL, 1)
-    draw_text(cv, 556, 104, 3, "VISA", TEAL)
-    draw_text(cv, 868, 108, 1, "No. KV-2024-1187", TEAL)
-    draw_text(cv, 556, 132, 2, "MULTIPLE ENTRY - BUSINESS", INK)
-    draw_text(cv, 556, 156, 1, "VALID 90 DAYS - SINGLE STAY MAX 30 DAYS", INK)
-    draw_text(cv, 556, 174, 1, "FEE PAID 45 KST - RECEIPT No. 2214", INK)
-    draw_text(cv, 556, 192, 1, "HOLDER MUST REGISTER WITH THE BORDER SERVICE", INK)
-    draw_text(cv, 556, 208, 1, "WITHIN 72 HOURS OF ARRIVAL", INK)
-    draw_seal(cv, 946, 200, 26, RED)
+    cv.line(546, 245, 989, 245, TEAL, 1)
+    draw_text_bold(cv, 556, 100, 3, "VISA", TEAL)
+    draw_text(cv, 868, 104, 1, "No. KV-2024-1187", TEAL)
+    draw_text_bold(cv, 556, 128, 2, "MULTIPLE ENTRY - BUSINESS", INK)
+    draw_text_bold(cv, 556, 150, 2, "VALID 90 DAYS - STAY MAX 30 DAYS", INK)
+    draw_text_bold(cv, 556, 172, 2, "FEE PAID 45 KST - RECEIPT No. 2214", INK)
+    draw_text_bold(cv, 556, 194, 2, "HOLDER MUST REGISTER WITH THE", INK)
+    draw_text_bold(cv, 556, 212, 2, "BORDER SERVICE WITHIN 72 HOURS", INK)
+    draw_text_bold(cv, 556, 230, 2, "OF ARRIVAL", INK)
+    draw_seal(cv, 948, 214, 26, RED)
 
     # stamps: two rows, three trips, arrival before departure, all
     # dated after the passport was issued (12 MAR 2024), in order.
+    # v2: bigger boxes, all stamp text at scale 2.
     stamps = [
-        (612, 306, -14, BLUE, [("DRAVIA", 1), ("ARRIVAL", 1), ("08 MAY 2024", 1)]),
-        (768, 306, 9, GREEN, [("DRAVIA", 1), ("DEPARTURE", 1), ("21 MAY 2024", 1)]),
-        (924, 306, -7, BLUE, [("OSTMAR", 1), ("ARRIVAL", 1), ("03 SEP 2024", 1)]),
-        (612, 436, 12, GREEN, [("OSTMAR", 1), ("DEPARTURE", 1), ("17 SEP 2024", 1)]),
-        (768, 436, -10, BLUE, [("TALVERIA", 1), ("ARRIVAL", 1), ("22 JAN 2025", 1)]),
-        (924, 436, 6, GREEN, [("TALVERIA", 1), ("DEPARTURE", 1), ("05 FEB 2025", 1)]),
+        (612, 312, -14, BLUE, [("DRAVIA", 2), ("ARRIVAL", 2), ("08 MAY 2024", 2)]),
+        (768, 312, 9, GREEN, [("DRAVIA", 2), ("DEPARTURE", 2), ("21 MAY 2024", 2)]),
+        (924, 312, -7, BLUE, [("OSTMAR", 2), ("ARRIVAL", 2), ("03 SEP 2024", 2)]),
+        (612, 442, 12, GREEN, [("OSTMAR", 2), ("DEPARTURE", 2), ("17 SEP 2024", 2)]),
+        (768, 442, -10, BLUE, [("TALVERIA", 2), ("ARRIVAL", 2), ("22 JAN 2025", 2)]),
+        (924, 442, 6, GREEN, [("TALVERIA", 2), ("DEPARTURE", 2), ("05 FEB 2025", 2)]),
     ]
     for cx, cy, ang, color, lines in stamps:
-        draw_stamp(cv, cx, cy, 138, 96, ang, color, lines)
+        draw_stamp(cv, cx, cy, 150, 100, ang, color, lines)
 
-    # conditions
-    draw_text(cv, 540, 516, 2, "CONDITIONS", INK)
-    draw_text(cv, 540, 540, 1, "1. THIS PASSPORT REMAINS THE PROPERTY OF THE", INK_SOFT)
-    draw_text(cv, 540, 554, 1, "   REPUBLIC OF KESTRIA.", INK_SOFT)
-    draw_text(cv, 540, 570, 1, "2. LOSS OR THEFT MUST BE REPORTED TO THE", INK_SOFT)
-    draw_text(cv, 540, 584, 1, "   NEAREST KESTRIAN MISSION.", INK_SOFT)
-    draw_text(cv, 540, 600, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK_SOFT)
-    draw_text(cv, 540, 614, 1, "   WHERE ENDORSED OTHERWISE.", INK_SOFT)
+    # conditions, v2: darker ink so the fine print reads too
+    draw_text_bold(cv, 540, 516, 2, "CONDITIONS", INK)
+    draw_text(cv, 540, 540, 1, "1. THIS PASSPORT REMAINS THE PROPERTY OF THE", INK)
+    draw_text(cv, 540, 554, 1, "   REPUBLIC OF KESTRIA.", INK)
+    draw_text(cv, 540, 570, 1, "2. LOSS OR THEFT MUST BE REPORTED TO THE", INK)
+    draw_text(cv, 540, 584, 1, "   NEAREST KESTRIAN MISSION.", INK)
+    draw_text(cv, 540, 600, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK)
+    draw_text(cv, 540, 614, 1, "   WHERE ENDORSED OTHERWISE.", INK)
 
     return png_bytes(cv.px, W, H)
 
