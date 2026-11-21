@@ -504,6 +504,19 @@ def draw_ghost(cv, x, y, w, h, alpha):
                       (px[o], px[o + 1], px[o + 2]), alpha * f)
 
 
+def draw_background(cv):
+    # v6.6: the watermark background is the image the user sent
+    # (background.png): a full-spread guilloche, pre-blended with
+    # the paper tone offline so the program stays fast and
+    # deterministic. Drawn first, under frame and data.
+    here = os.path.dirname(os.path.abspath(__file__))
+    bw, bh, px = read_png_rgb(os.path.join(here, "background.png"))
+    assert (bw, bh) == (W, H), (bw, bh, W, H)
+    sub = Canvas(bw, bh, (0, 0, 0))
+    sub.px = px
+    cv.blit(sub, 0, 0)
+
+
 def draw_watermark_waves(cv, x0, x1, y0, y1, nlines, color):
     # v6.3: the watermark is waves, not just a photo — after the
     # pattern-generator repo's Linear Wave: horizontal sine bands
@@ -674,6 +687,11 @@ def draw_seal(cv, cx, cy, r, color):
 def build():
     cv = Canvas(W, H, PAPER)
 
+    # v6.6: the watermark background is the image the user sent
+    # (background.png): the whole spread's guilloche, drawn first
+    # so the frame and the data sit on top of it.
+    draw_background(cv)
+
     # outer frame
     cv.line(10, 10, W - 11, 10, INK, 2)
     cv.line(10, H - 11, W - 11, H - 11, INK, 2)
@@ -696,21 +714,9 @@ def build():
         fill_rect_alpha(cv, 496 + i * 3, 16, 3, H - 32, (90, 80, 60), a)
         fill_rect_alpha(cv, 518 - i * 3, 16, 3, H - 32, (90, 80, 60), a)
 
-    # v6: guilloche rosette behind the data page (replaces the plain
-    # concentric rings): a banknote-style security rosette
-    # v6.5: the whole watermark background in visible light blue,
-    # like the user's example (GUILLOCHE was near-white, invisible)
-    draw_rosette(cv, 256, 310, MESH_BLUE)
-    # v6.2: watermark medallion from the pattern-generator repo
-    draw_watermark_rose(cv, 256, 310, MESH_BLUE)
-    # v6.3: wave watermark across both pages (top-rank style)
-    # v6.4: wider — denser bands, full width
-    draw_watermark_waves(cv, 28, 496, 40, 580, 12, MESH_BLUE)
-    draw_watermark_waves(cv, 528, 996, 40, 580, 8, MESH_BLUE)
-    # v6.5: full-page guilloche mesh + big shield emblem (user's example)
-    draw_guilloche_mesh(cv, 28, 496, 40, 580, MESH_BLUE)
-    draw_guilloche_mesh(cv, 528, 996, 40, 580, MESH_BLUE)
-    draw_big_shield(cv, 300, 300, MESH_BLUE)
+    # v6.6: the code-drawn watermark (rosette, rose, waves, mesh,
+    # shield) is retired — the user's background image is the
+    # watermark now. The ghost photo stays (separate call below).
 
     # vertical margin note, left edge
     draw_text_rot(cv, 26, 430, 1, "REPUBLIKA KESTRIA - PASAPORTA", INK_SOFT, -90)
