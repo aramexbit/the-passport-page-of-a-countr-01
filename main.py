@@ -374,73 +374,79 @@ def mrz_lines():
 
 
 # ---------------------------------------------------------------- portrait
+def read_png_rgb(path):
+    """Decode a non-interlaced 8-bit PNG (colour type 2 RGB or 6 RGBA)
+    with the standard library only. Returns (w, h, bytearray of RGB).
+    The portrait asset is a photo: far too detailed to draw
+    convincingly from shapes, so the program ships it as a file and
+    composites it, the way a real passport pastes a photo in."""
+    d = open(path, "rb").read()
+    assert d[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
+    off = 8
+    idat = bytearray()
+    w = h = bd = ct = im = None
+    while off < len(d):
+        ln, typ = struct.unpack(">I4s", d[off:off + 8])
+        body = d[off + 8:off + 8 + ln]
+        if typ == b"IHDR":
+            w, h, bd, ct, _cm, _fm, im = struct.unpack(">IIBBBBB", body)
+        elif typ == b"IDAT":
+            idat += body
+        elif typ == b"IEND":
+            break
+        off += 12 + ln
+    assert bd == 8 and ct in (2, 6) and im == 0, (bd, ct, im)
+    ch = 3 if ct == 2 else 4
+    raw = zlib.decompress(bytes(idat))
+    stride = w * ch
+    px = bytearray(w * h * 3)
+    prev = bytearray(stride)
+    pos = 0
+    for yy in range(h):
+        f = raw[pos]
+        pos += 1
+        line = bytearray(raw[pos:pos + stride])
+        pos += stride
+        if f == 1:
+            for i in range(ch, stride):
+                line[i] = (line[i] + line[i - ch]) & 255
+        elif f == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 255
+        elif f == 3:
+            for i in range(stride):
+                a = line[i - ch] if i >= ch else 0
+                line[i] = (line[i] + ((a + prev[i]) >> 1)) & 255
+        elif f == 4:
+            for i in range(stride):
+                a = line[i - ch] if i >= ch else 0
+                b = prev[i]
+                c = prev[i - ch] if i >= ch else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[i] = (line[i] + pr) & 255
+        elif f != 0:
+            raise ValueError("unsupported PNG filter %d" % f)
+        for xx in range(w):
+            o = (yy * w + xx) * 3
+            s = xx * ch
+            px[o] = line[s]
+            px[o + 1] = line[s + 1]
+            px[o + 2] = line[s + 2]
+        prev = line
+    return w, h, px
+
+
 def draw_portrait(cv, x, y, w, h):
-    # Draw into a sub-canvas the size of the photo box, then blit: the
-    # jacket ellipse must not spill past the frame (it did in v1).
-    # v2: a more lifelike portrait — soft shading, catchlights, ears,
-    # hair strands and a highlight, a shadow under the chin.
-    sub = Canvas(w, h, PHOTO_TOP)
-    for i in range(h):
-        sub.fill_rect(0, i, w, 1, lerp(PHOTO_TOP, PHOTO_BOT, i / max(1, h - 1)))
-    # soft light behind the head, like a studio portrait
-    ellipse_alpha(sub, w // 2, 82, 62, 66, (235, 240, 246), 0.35)
-    cx = w // 2
-    # shoulders / jacket
-    sub.ellipse(cx, h + 16, w // 2 - 4, 58, JACKET)
-    # jacket shading at the edges
-    ellipse_alpha(sub, cx - 52, h - 8, 26, 34, (20, 36, 60), 0.30)
-    ellipse_alpha(sub, cx + 52, h - 8, 26, 34, (20, 36, 60), 0.30)
-    # shirt V
-    sub.polygon([(cx - 13, 138), (cx + 13, 138), (cx, h)], SHIRT)
-    # jacket lapels
-    sub.line(cx - 13, 138, cx - 40, h, (30, 52, 82), 2)
-    sub.line(cx + 13, 138, cx + 40, h, (30, 52, 82), 2)
-    # neck, with a shadow under the chin
-    sub.fill_rect(cx - 13, 118, 26, 26, SKIN_D)
-    ellipse_alpha(sub, cx, 124, 16, 7, (150, 105, 72), 0.35)
-    # ears
-    sub.ellipse(cx - 40, 84, 6, 12, SKIN)
-    sub.ellipse(cx + 40, 84, 6, 12, SKIN)
-    ellipse_alpha(sub, cx - 40, 84, 4, 8, SKIN_D, 0.45)
-    ellipse_alpha(sub, cx + 40, 84, 4, 8, SKIN_D, 0.45)
-    # hair cap
-    sub.ellipse(cx, 56, 43, 38, HAIR)
-    # face
-    sub.ellipse(cx, 80, 40, 46, SKIN)
-    # soft shading: forehead light, cheek shadows, chin shadow
-    ellipse_alpha(sub, cx, 48, 26, 12, (246, 214, 180), 0.45)
-    ellipse_alpha(sub, cx - 26, 96, 12, 18, (206, 152, 108), 0.28)
-    ellipse_alpha(sub, cx + 26, 96, 12, 18, (206, 152, 108), 0.28)
-    ellipse_alpha(sub, cx, 122, 14, 6, (206, 152, 108), 0.30)
-    # side locks of hair
-    sub.ellipse(cx - 40, 98, 8, 32, HAIR)
-    sub.ellipse(cx + 40, 98, 8, 32, HAIR)
-    # hair strands and a highlight
-    sub.line(cx - 30, 30, cx - 34, 62, (96, 62, 44), 1)
-    sub.line(cx - 12, 22, cx - 14, 54, (96, 62, 44), 1)
-    sub.line(cx + 8, 22, cx + 12, 52, (96, 62, 44), 1)
-    sub.line(cx + 28, 30, cx + 32, 60, (96, 62, 44), 1)
-    ellipse_alpha(sub, cx - 16, 34, 16, 7, (122, 88, 62), 0.50)
-    # brows
-    sub.line(cx - 25, 68, cx - 9, 66, HAIR, 2)
-    sub.line(cx + 9, 66, cx + 25, 68, HAIR, 2)
-    # eyes: white, brown iris, dark pupil, catchlight, lid line
-    for ex in (cx - 17, cx + 17):
-        sub.ellipse(ex, 78, 8, 5, (255, 255, 255))
-        sub.ellipse(ex, 78, 5, 4, (94, 62, 40))
-        sub.ellipse(ex, 78, 3, 3, (28, 20, 16))
-        sub.set(ex - 2, 76, (255, 255, 255))
-        sub.line(ex - 8, 72, ex + 8, 72, (90, 60, 46), 1)
-    # nose: shaded side, bridge highlight, nostril line
-    ellipse_alpha(sub, cx - 4, 90, 3, 8, (206, 152, 108), 0.35)
-    sub.line(cx + 1, 82, cx + 1, 94, (246, 214, 180), 1)
-    sub.line(cx, 82, cx - 2, 96, SKIN_D, 2)
-    sub.line(cx - 2, 96, cx + 3, 97, SKIN_D, 2)
-    # lips: darker upper lip, lighter lower lip with a highlight
-    sub.ellipse(cx, 108, 9, 3, (150, 62, 62))
-    sub.ellipse(cx, 111, 8, 3, (196, 110, 108))
-    sub.set(cx - 3, 110, (232, 170, 165))
-    sub.set(cx + 2, 111, (232, 170, 165))
+    # v3: a real photo asset (portrait.png, made in the build session):
+    # Mara in her ferry-master uniform. The program composites it into
+    # the photo box and draws the frame on top.
+    here = os.path.dirname(os.path.abspath(__file__))
+    pw, ph, px = read_png_rgb(os.path.join(here, "portrait.png"))
+    assert (pw, ph) == (w, h), (pw, ph, w, h)
+    sub = Canvas(pw, ph, (0, 0, 0))
+    sub.px = px
     cv.blit(sub, x, y)
     # frame
     cv.line(x, y, x + w - 1, y, INK, 2)
@@ -552,7 +558,8 @@ def build():
     field("DATE OF BIRTH", "14 JUN 1992", y=row)
     field("SEX", "F", x=fx + 170, y=row)
     row += step
-    field("PLACE OF BIRTH", "ALDHAVEN", y=row)
+    field("BIRTHPLACE", "ALDHAVEN", y=row)
+    field("OCCUPATION", "FERRY MASTER", x=fx + 136, y=row, adv=11, bold=False)
     row += step
     field("ISSUED", "12 MAR 2024", y=row)
     field("EXPIRES", "11 MAR 2034", x=fx + 146, y=row)
@@ -565,6 +572,9 @@ def build():
     draw_text(cv, 34, 512, 2, l1, INK, adv=10)
     draw_text(cv, 34, 534, 2, l2, INK, adv=10)
     text_center(cv, 256, 576, 1, "THIS PASSPORT CONTAINS 32 PAGES - KESTRIA", INK_SOFT)
+    # page numbers, small, in the bottom corners
+    draw_text(cv, 28, 620, 1, "2", INK_SOFT)
+    draw_text(cv, 992, 620, 1, "3", INK_SOFT)
 
     # ---- right page: visas and stamps ----
     text_center_bold(cv, 768, 30, 3, "VISAS", INK)
@@ -581,13 +591,13 @@ def build():
     cv.line(546, 98, 989, 98, TEAL, 1)
     cv.line(546, 245, 989, 245, TEAL, 1)
     draw_text_bold(cv, 556, 100, 3, "VISA", TEAL)
-    draw_text(cv, 868, 104, 1, "No. KV-2024-1187", TEAL)
-    draw_text_bold(cv, 556, 128, 2, "MULTIPLE ENTRY - BUSINESS", INK)
+    draw_text(cv, 868, 104, 1, "No. DV-2024-1187", TEAL)
+    draw_text_bold(cv, 556, 128, 2, "MULTIPLE ENTRY - FERRY SERVICE", INK)
     draw_text_bold(cv, 556, 150, 2, "VALID 90 DAYS - STAY MAX 30 DAYS", INK)
     draw_text_bold(cv, 556, 172, 2, "FEE PAID 45 KST - RECEIPT No. 2214", INK)
-    draw_text_bold(cv, 556, 194, 2, "HOLDER MUST REGISTER WITH THE", INK)
-    draw_text_bold(cv, 556, 212, 2, "BORDER SERVICE WITHIN 72 HOURS", INK)
-    draw_text_bold(cv, 556, 230, 2, "OF ARRIVAL", INK)
+    draw_text_bold(cv, 556, 194, 2, "FERRY MASTER'S LICENCE FM-2210", INK)
+    draw_text_bold(cv, 556, 212, 2, "LAKE KESTRA ROUTES ONLY", INK)
+    draw_text_bold(cv, 556, 230, 2, "VESSEL CLASS III", INK)
     draw_seal(cv, 948, 214, 26, RED)
 
     # stamps: two rows, three trips, arrival before departure, all
@@ -603,6 +613,11 @@ def build():
     ]
     for cx, cy, ang, color, lines in stamps:
         draw_stamp(cv, cx, cy, 150, 100, ang, color, lines)
+
+    # lake toll stamp, stamped across the visa's foot and the top of
+    # the stamp grid, the way a real toll stamp lands on top of the rest
+    draw_stamp(cv, 850, 260, 190, 36, -7, (176, 138, 28),
+               [("LAKE TOLL PAID", 2)])
 
     # conditions, v2: darker ink so the fine print reads too
     draw_text_bold(cv, 540, 516, 2, "CONDITIONS", INK)
