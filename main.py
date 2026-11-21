@@ -503,6 +503,23 @@ def draw_ghost(cv, x, y, w, h, alpha):
                       (px[o], px[o + 1], px[o + 2]), alpha * f)
 
 
+def draw_watermark_rose(cv, cx, cy, color):
+    # v6.2: the watermark image, built from the pattern-generator
+    # repo's Rhodonea (rose) curve: r = A * cos(k * theta). A
+    # seven-petal medallion, faint like a paper watermark, under the
+    # printed data. k = 7 (odd) closes the curve after one pi.
+    A, k = 110, 7
+    steps = 720
+    pts = []
+    for i in range(steps + 1):
+        t = math.pi * i / steps
+        r = A * math.cos(k * t)
+        pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
+    for i in range(len(pts) - 1):
+        cv.line(int(pts[i][0]), int(pts[i][1]),
+                int(pts[i + 1][0]), int(pts[i + 1][1]), color, 1)
+
+
 def draw_rosette(cv, cx, cy, color):
     # v6: a banknote rosette behind the data page, after the
     # parametric curves in the pattern-generator repo (circular wave
@@ -591,6 +608,8 @@ def build():
     # v6: guilloche rosette behind the data page (replaces the plain
     # concentric rings): a banknote-style security rosette
     draw_rosette(cv, 256, 310, GUILLOCHE)
+    # v6.2: watermark medallion from the pattern-generator repo
+    draw_watermark_rose(cv, 256, 310, GUILLOCHE)
 
     # vertical margin note, left edge
     draw_text_rot(cv, 26, 430, 1, "REPUBLIKA KESTRIA - PASAPORTA", INK_SOFT, -90)
