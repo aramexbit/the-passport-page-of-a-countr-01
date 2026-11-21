@@ -379,6 +379,29 @@ def mrz_lines():
 
 
 # ---------------------------------------------------------------- portrait
+def marble(cv):
+    """Dark polished marble: a few pale veins wandering across the
+    surface, drawn with a fixed seed so two runs stay byte-identical.
+    The spread covers the middle, so only the top and bottom bands
+    of veins ever show."""
+    s = [987654321]
+
+    def rnd():
+        s[0] = (s[0] * 1103515245 + 12345) & 0x7FFFFFFF
+        return s[0] / 0x7FFFFFFF
+
+    for _ in range(9):
+        x = int(rnd() * cv.w)
+        y = int(rnd() * cv.h)
+        ang = rnd() * math.pi
+        for _ in range(60):
+            ang += (rnd() - 0.5) * 0.9
+            nx = x + int(14 * math.cos(ang))
+            ny = y + int(14 * math.sin(ang))
+            cv.line(x, y, nx, ny, (54, 58, 68), 1)
+            x, y = nx, ny
+
+
 def read_png_rgb(path):
     """Decode a non-interlaced 8-bit PNG (colour type 2 RGB or 6 RGBA)
     with the standard library only. Returns (w, h, bytearray of RGB).
@@ -460,6 +483,26 @@ def draw_portrait(cv, x, y, w, h):
     cv.line(x + w - 1, y, x + w - 1, y + h - 1, INK, 2)
 
 
+def draw_ghost(cv, x, y, w, h, alpha):
+    # v5: the watermark — the holder's photo, faded into the paper
+    # under the printed data, the way a real passport's ghost image
+    # sits. No water, no paper: a faded copy of the same photo asset.
+    here = os.path.dirname(os.path.abspath(__file__))
+    pw, ph, px = read_png_rgb(os.path.join(here, "portrait.png"))
+    # The edges feather to zero so no hard rectangle shows in the
+    # paper: a watermark has no border.
+    for ty in range(h):
+        sy = ty * ph // h
+        dy = min(ty, h - 1 - ty)
+        for tx in range(w):
+            sx = tx * pw // w
+            dx = min(tx, w - 1 - tx)
+            f = min(1.0, min(dx, dy) / 12.0)
+            o = (sy * pw + sx) * 3
+            set_alpha(cv, x + tx, y + ty,
+                      (px[o], px[o + 1], px[o + 2]), alpha * f)
+
+
 # ---------------------------------------------------------------- stamps
 def draw_stamp(cv, cx, cy, w, h, ang, color, lines):
     rot_rect(cv, cx, cy, w, h, ang, color, 2)
@@ -525,6 +568,12 @@ def build():
     text_center_bold(cv, 256, 148, 2, "PASAPORTA", RED)
     cv.line(40, 164, 484, 164, RULE, 1)
 
+    # v5: holographic security mushroom, top-right of the data page
+    fill_rect_alpha(cv, 441, 96, 8, 20, (210, 200, 180), 0.55)
+    ellipse_alpha(cv, 445, 96, 20, 11, (110, 200, 220), 0.55)
+    ellipse_alpha(cv, 438, 94, 10, 7, (200, 150, 220), 0.45)
+    ellipse_alpha(cv, 452, 94, 8, 6, (220, 200, 120), 0.45)
+
     # portrait, with a soft drop shadow behind its frame
     fill_rect_alpha(cv, 38, 182, 150, 196, (60, 50, 40), 0.22)
     draw_portrait(cv, 34, 178, 150, 196)
@@ -535,6 +584,11 @@ def build():
     cv.line(118, 398, 150, 390, INK, 1)
     cv.line(150, 390, 174, 396, INK, 1)
     text_center(cv, 109, 406, 2, "SIGNATURE", INK_SOFT)
+
+    # v5: the watermark under the printed data, plus the Border
+    # Service seal in the empty space under the portrait
+    draw_ghost(cv, 370, 290, 90, 118, 0.10)
+    draw_seal(cv, 109, 445, 28, TEAL)
 
     # data fields, two columns where they fit. v2: labels at scale 2
     # like the values (the scale-1 labels were the hardest text to
@@ -585,6 +639,12 @@ def build():
     draw_text(cv, 34, 512, 2, l1, INK, adv=10)
     draw_text(cv, 34, 534, 2, l2, INK, adv=10)
     text_center(cv, 256, 576, 1, "THIS PASSPORT CONTAINS 32 PAGES - KESTRIA", INK_SOFT)
+    # v5: teal security waves along the foot of the data page
+    for k, base in enumerate((592, 600, 608)):
+        for xx in range(28, 488, 4):
+            y0 = base + int(3 * math.sin(xx / 26.0 + k * 1.7))
+            y1 = base + int(3 * math.sin((xx + 4) / 26.0 + k * 1.7))
+            cv.line(xx, y0, xx + 4, y1, TEAL, 1)
     # page numbers, small, in the bottom corners
     draw_text(cv, 28, 620, 1, "2", INK_SOFT)
     draw_text(cv, 992, 620, 1, "3", INK_SOFT)
@@ -641,9 +701,12 @@ def build():
     draw_text(cv, 540, 600, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK)
     draw_text(cv, 540, 614, 1, "   WHERE ENDORSED OTHERWISE.", INK)
 
-    # v4: the spread sits on a dark surface, like a book photographed
-    # on a table — the two pages read as two pages, not one flat card
-    out = Canvas(1024, 1024, (14, 16, 20))
+    # v5: the spread sits on dark polished marble, like a book
+    # photographed on a table — the two pages read as two pages,
+    # not one flat card
+    out = Canvas(1024, 1024, (15, 17, 21))
+    marble(out)
+    fill_rect_alpha(out, 6, 200, 1012, 632, (0, 0, 0), 0.40)
     out.blit(cv, 0, 192)
     return png_bytes(out.px, 1024, 1024)
 
