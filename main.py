@@ -83,6 +83,11 @@ FONT = {
     "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
     "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
     "Z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
+    # v4: Kestrian (Nordic) letters for the bilingual field labels
+    "Ö": ("10101", "01110", "10001", "10001", "10001", "10001", "01110"),
+    "Ð": ("11110", "10001", "10001", "11111", "10001", "10001", "11110"),
+    "Æ": ("01110", "10001", "10001", "11111", "11110", "10001", "10001"),
+    "Ú": ("00010", "10001", "10001", "10001", "10001", "10001", "01110"),
     "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
     "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
     "2": ("01110", "10001", "00001", "00110", "01000", "10000", "11111"),
@@ -538,8 +543,14 @@ def build():
     row = 182
     step = 38
 
-    def field(label, value, x=fx, y=None, vscale=2, adv=None, bold=True):
+    def field(label, value, x=fx, y=None, vscale=2, adv=None, bold=True,
+              local=None):
         draw_text(cv, x, y, 2, label, INK_SOFT)
+        if local:
+            # the Kestrian word, small and baseline-aligned after the
+            # English label: the language column the brief names
+            draw_text(cv, x + len(label) * 12 + 2, y + 7, 1,
+                      "/" + local, INK_SOFT)
         if bold:
             draw_text_bold(cv, x, y + 15, vscale, value, INK, adv)
         else:
@@ -549,22 +560,24 @@ def build():
     field("CODE", "KES", x=fx + 58, y=row)
     field("PASSPORT No.", "KST847291", x=fx + 126, y=row)
     row += step
-    field("SURNAME", "VOSS", y=row)
+    field("SURNAME", "VOSS", y=row, local="EFTIRNAFN")
     row += step
-    field("GIVEN NAMES", "MARA ELENA", y=row)
+    field("GIVEN NAMES", "MARA ELENA", y=row, local="FORNÖFN")
     row += step
-    field("NATIONALITY", "KESTRIAN", y=row)
+    field("NATIONALITY", "KESTRIAN", y=row, local="THJODERNI")
     row += step
     field("DATE OF BIRTH", "14 JUN 1992", y=row)
-    field("SEX", "F", x=fx + 170, y=row)
+    field("SEX", "F", x=fx + 170, y=row, local="KYN")
     row += step
     field("BIRTHPLACE", "ALDHAVEN", y=row)
-    field("OCCUPATION", "FERRY MASTER", x=fx + 136, y=row, adv=11, bold=False)
+    field("OCCUPATION", "FERRY MASTER", x=fx + 126, y=row, adv=11,
+          bold=False, local="STARF")
     row += step
-    field("ISSUED", "12 MAR 2024", y=row)
-    field("EXPIRES", "11 MAR 2034", x=fx + 146, y=row)
+    field("ISSUED", "12 MAR 2024", y=row, local="ÚTGEFIÐ")
+    field("EXPIRES", "11 MAR 2034", x=fx + 142, y=row, local="LOKADAGUR")
     row += step
-    field("AUTHORITY", "BORDER SERVICE - ALDHAVEN", y=row, adv=11, bold=False)
+    field("AUTHORITY", "BORDER SERVICE - ALDHAVEN", y=row, adv=11,
+          bold=False, local="YFIRVALD")
 
     # MRZ band, full data-page width, tracked like real OCR-B
     l1, l2 = mrz_lines()
@@ -628,7 +641,11 @@ def build():
     draw_text(cv, 540, 600, 1, "3. VALID FOR TRAVEL TO ALL COUNTRIES EXCEPT", INK)
     draw_text(cv, 540, 614, 1, "   WHERE ENDORSED OTHERWISE.", INK)
 
-    return png_bytes(cv.px, W, H)
+    # v4: the spread sits on a dark surface, like a book photographed
+    # on a table — the two pages read as two pages, not one flat card
+    out = Canvas(1024, 1024, (14, 16, 20))
+    out.blit(cv, 0, 192)
+    return png_bytes(out.px, 1024, 1024)
 
 
 def png_bytes(rgb, w, h):
