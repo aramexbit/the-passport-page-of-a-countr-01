@@ -52,6 +52,7 @@ PHOTO_BOT = (147, 165, 184)
 JACKET = (47, 74, 107)
 SHIRT = (244, 244, 240)
 GUILLOCHE = (233, 238, 246)
+MESH_BLUE = (158, 178, 205)
 SPINE = (214, 205, 180)
 
 # ---------------------------------------------------------------- 5x7 font
@@ -509,9 +510,12 @@ def draw_watermark_waves(cv, x0, x1, y0, y1, nlines, color):
     # across the page, faint like a paper watermark, under the
     # printed data. (Top-rank entries watermark with waves, not
     # only a ghost photo.)
+    # v6.4: the wave watermark is a WIDE background, not just the
+    # photo — bigger amplitude, denser lines, each wave drawn as a
+    # 3px band so it reads as a broad watermark across the page.
     for i in range(nlines):
         yb = y0 + (y1 - y0) * (i + 0.5) / nlines
-        amp = 5 + (i % 3) * 2
+        amp = 9 + (i % 3) * 3
         freq = 0.045 + (i % 4) * 0.012
         phase = i * 1.3
         pts = []
@@ -521,9 +525,73 @@ def draw_watermark_waves(cv, x0, x1, y0, y1, nlines, color):
             y = (yb + amp * math.sin(freq * x + phase)
                  + 2 * math.sin(freq * 2.3 * x + phase * 0.7))
             pts.append((x, y))
+        for dy in (0, 2):
+            for j in range(len(pts) - 1):
+                cv.line(int(pts[j][0]), int(pts[j][1]) + dy,
+                        int(pts[j + 1][0]), int(pts[j + 1][1]) + dy,
+                        color, 1)
+
+
+def draw_guilloche_mesh(cv, x0, x1, y0, y1, color):
+    # v6.5: the full-page guilloche texture from the user's example:
+    # a fine net of wavy horizontal + vertical lines covering the
+    # whole page, faint like a paper watermark, under the data.
+    for i in range(24):
+        yb = y0 + (y1 - y0) * (i + 0.5) / 24
+        amp = 4 + (i % 3)
+        freq = 0.05 + (i % 4) * 0.01
+        phase = i * 1.1
+        pts = []
+        steps = 200
+        for s in range(steps + 1):
+            x = x0 + (x1 - x0) * s / steps
+            y = yb + amp * math.sin(freq * x + phase)
+            pts.append((x, y))
         for j in range(len(pts) - 1):
             cv.line(int(pts[j][0]), int(pts[j][1]),
                     int(pts[j + 1][0]), int(pts[j + 1][1]), color, 1)
+    for i in range(12):
+        xb = x0 + (x1 - x0) * (i + 0.5) / 12
+        amp = 4 + (i % 3)
+        freq = 0.05 + (i % 4) * 0.01
+        phase = i * 1.7
+        pts = []
+        steps = 200
+        for s in range(steps + 1):
+            y = y0 + (y1 - y0) * s / steps
+            x = xb + amp * math.sin(freq * y + phase)
+            pts.append((x, y))
+        for j in range(len(pts) - 1):
+            cv.line(int(pts[j][0]), int(pts[j][1]),
+                    int(pts[j + 1][0]), int(pts[j + 1][1]), color, 1)
+
+
+def draw_big_shield(cv, cx, cy, color):
+    # v6.5: the large faint shield + star watermark in the middle
+    # of the data page, like the user's example.
+    w, h = 110, 130
+    pts = [
+        (cx - w // 2, cy - h // 2),
+        (cx + w // 2, cy - h // 2),
+        (cx + w // 2, cy + 10),
+        (cx, cy + h // 2),
+        (cx - w // 2, cy + 10),
+    ]
+    for i in range(len(pts)):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % len(pts)]
+        cv.line(x0, y0, x1, y1, color, 1)
+    # five-point star inside, drawn from 10 alternating vertices
+    r_out, r_in = 38, 15
+    star = []
+    for k in range(10):
+        r = r_out if k % 2 == 0 else r_in
+        a = -math.pi / 2 + k * math.pi / 5
+        star.append((cx + r * math.cos(a), cy - 10 + r * math.sin(a)))
+    for i in range(10):
+        x0, y0 = star[i]
+        x1, y1 = star[(i + 1) % 10]
+        cv.line(int(x0), int(y0), int(x1), int(y1), color, 1)
 
 
 def draw_watermark_rose(cv, cx, cy, color):
@@ -630,12 +698,19 @@ def build():
 
     # v6: guilloche rosette behind the data page (replaces the plain
     # concentric rings): a banknote-style security rosette
-    draw_rosette(cv, 256, 310, GUILLOCHE)
+    # v6.5: the whole watermark background in visible light blue,
+    # like the user's example (GUILLOCHE was near-white, invisible)
+    draw_rosette(cv, 256, 310, MESH_BLUE)
     # v6.2: watermark medallion from the pattern-generator repo
-    draw_watermark_rose(cv, 256, 310, GUILLOCHE)
+    draw_watermark_rose(cv, 256, 310, MESH_BLUE)
     # v6.3: wave watermark across both pages (top-rank style)
-    draw_watermark_waves(cv, 28, 496, 40, 580, 9, GUILLOCHE)
-    draw_watermark_waves(cv, 528, 996, 40, 580, 5, GUILLOCHE)
+    # v6.4: wider — denser bands, full width
+    draw_watermark_waves(cv, 28, 496, 40, 580, 12, MESH_BLUE)
+    draw_watermark_waves(cv, 528, 996, 40, 580, 8, MESH_BLUE)
+    # v6.5: full-page guilloche mesh + big shield emblem (user's example)
+    draw_guilloche_mesh(cv, 28, 496, 40, 580, MESH_BLUE)
+    draw_guilloche_mesh(cv, 528, 996, 40, 580, MESH_BLUE)
+    draw_big_shield(cv, 300, 300, MESH_BLUE)
 
     # vertical margin note, left edge
     draw_text_rot(cv, 26, 430, 1, "REPUBLIKA KESTRIA - PASAPORTA", INK_SOFT, -90)
