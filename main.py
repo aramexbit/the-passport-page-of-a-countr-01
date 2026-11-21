@@ -503,6 +503,29 @@ def draw_ghost(cv, x, y, w, h, alpha):
                       (px[o], px[o + 1], px[o + 2]), alpha * f)
 
 
+def draw_watermark_waves(cv, x0, x1, y0, y1, nlines, color):
+    # v6.3: the watermark is waves, not just a photo — after the
+    # pattern-generator repo's Linear Wave: horizontal sine bands
+    # across the page, faint like a paper watermark, under the
+    # printed data. (Top-rank entries watermark with waves, not
+    # only a ghost photo.)
+    for i in range(nlines):
+        yb = y0 + (y1 - y0) * (i + 0.5) / nlines
+        amp = 5 + (i % 3) * 2
+        freq = 0.045 + (i % 4) * 0.012
+        phase = i * 1.3
+        pts = []
+        steps = 240
+        for s in range(steps + 1):
+            x = x0 + (x1 - x0) * s / steps
+            y = (yb + amp * math.sin(freq * x + phase)
+                 + 2 * math.sin(freq * 2.3 * x + phase * 0.7))
+            pts.append((x, y))
+        for j in range(len(pts) - 1):
+            cv.line(int(pts[j][0]), int(pts[j][1]),
+                    int(pts[j + 1][0]), int(pts[j + 1][1]), color, 1)
+
+
 def draw_watermark_rose(cv, cx, cy, color):
     # v6.2: the watermark image, built from the pattern-generator
     # repo's Rhodonea (rose) curve: r = A * cos(k * theta). A
@@ -610,6 +633,9 @@ def build():
     draw_rosette(cv, 256, 310, GUILLOCHE)
     # v6.2: watermark medallion from the pattern-generator repo
     draw_watermark_rose(cv, 256, 310, GUILLOCHE)
+    # v6.3: wave watermark across both pages (top-rank style)
+    draw_watermark_waves(cv, 28, 496, 40, 580, 9, GUILLOCHE)
+    draw_watermark_waves(cv, 528, 996, 40, 580, 5, GUILLOCHE)
 
     # vertical margin note, left edge
     draw_text_rot(cv, 26, 430, 1, "REPUBLIKA KESTRIA - PASAPORTA", INK_SOFT, -90)
